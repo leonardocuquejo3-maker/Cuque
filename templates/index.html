@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CUQUE</title>
+
+<style>
+*{box-sizing:border-box}
+
+body{
+    margin:0;
+    min-height:100vh;
+    background:#080808;
+    color:#fff;
+    font-family:Arial,sans-serif;
+}
+
+.container{
+    width:92%;
+    max-width:650px;
+    margin:auto;
+    padding:55px 0;
+}
+
+.logo{
+    text-align:center;
+    margin-bottom:35px;
+}
+
+.logo h1{
+    margin:0;
+    font-size:44px;
+    letter-spacing:-3px;
+}
+
+.logo span{
+    color:#00e676;
+}
+
+.logo p{
+    color:#666;
+    font-size:13px;
+}
+
+.card{
+    background:#111;
+    border:1px solid #222;
+    border-radius:20px;
+    padding:20px;
+}
+
+.search{
+    display:flex;
+    gap:8px;
+}
+
+input{
+    flex:1;
+    min-width:0;
+    height:50px;
+    padding:0 15px;
+    border-radius:11px;
+    border:1px solid #292929;
+    background:#080808;
+    color:white;
+    outline:none;
+    font-size:15px;
+}
+
+input:focus{
+    border-color:#00e676;
+}
+
+button{
+    border:0;
+    border-radius:11px;
+    background:#00e676;
+    color:#000;
+    font-weight:bold;
+    cursor:pointer;
+}
+
+.search button{
+    padding:0 20px;
+}
+
+button:hover{
+    background:#00c853;
+}
+
+button:disabled{
+    opacity:.5;
+}
+
+#status{
+    text-align:center;
+    color:#00e676;
+    font-size:13px;
+    margin-top:18px;
+}
+
+.result{
+    border-top:1px solid #222;
+    padding:17px 0;
+}
+
+.title{
+    font-size:15px;
+    margin-bottom:12px;
+}
+
+.buttons{
+    display:flex;
+    gap:8px;
+}
+
+.buttons button{
+    flex:1;
+    height:40px;
+}
+
+.wav{
+    background:#222!important;
+    color:white!important;
+}
+
+.download{
+    display:block;
+    width:100%;
+    margin-top:12px;
+    padding:13px;
+    text-align:center;
+    text-decoration:none;
+    border-radius:11px;
+    background:#00e676;
+    color:#000;
+    font-weight:bold;
+}
+
+@media(max-width:500px){
+    .search{
+        flex-direction:column;
+    }
+
+    .search button{
+        height:48px;
+    }
+
+    .buttons{
+        flex-direction:column;
+    }
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<div class="logo">
+    <h1>CU<span>QUE</span></h1>
+    <p>YouTube Audio</p>
+</div>
+
+<div class="card">
+
+<div class="search">
+
+<input
+    id="query"
+    placeholder="Buscar o pegar URL..."
+    autocomplete="off"
+>
+
+<button id="searchButton">
+    Buscar
+</button>
+
+</div>
+
+<div id="status"></div>
+<div id="results"></div>
+
+</div>
+</div>
+
+<script>
+
+const query =
+    document.getElementById("query");
+
+const searchButton =
+    document.getElementById("searchButton");
+
+const status =
+    document.getElementById("status");
+
+const results =
+    document.getElementById("results");
+
+
+function escapeHTML(text){
+
+    const div =
+        document.createElement("div");
+
+    div.textContent = text;
+
+    return div.innerHTML;
+}
+
+
+async function search(){
+
+    const text =
+        query.value.trim();
+
+    if(!text){
+        status.textContent =
+            "Escribí algo primero.";
+        return;
+    }
+
+    searchButton.disabled = true;
+    status.textContent = "Buscando...";
+    results.innerHTML = "";
+
+    try{
+
+        const response =
+            await fetch("/api/search",{
+                method:"POST",
+                headers:{
+                    "Content-Type":
+                        "application/json"
+                },
+                body:JSON.stringify({
+                    query:text
+                })
+            });
+
+        const data =
+            await response.json();
+
+        if(!response.ok){
+            throw new Error(
+                data.error ||
+                "Error de búsqueda"
+            );
+        }
+
+        if(!data.results ||
+           data.results.length === 0){
+
+            status.textContent =
+                "No se encontraron resultados.";
+
+            return;
+        }
+
+        status.textContent = "";
+
+        data.results.forEach(video => {
+
+            const item =
+                document.createElement("div");
+
+            item.className = "result";
+
+            item.innerHTML = `
+                <div class="title">
+                    ${escapeHTML(video.title)}
+                </div>
+
+                <div class="buttons">
+
+                    <button
+                        onclick='downloadAudio(
+                            ${JSON.stringify(video.url)},
+                            "mp3",
+                            this
+                        )'>
+                        MP3
+                    </button>
+
+                    <button
+                        class="wav"
+                        onclick='downloadAudio(
+                            ${JSON.stringify(video.url)},
+                            "wav",
+                            this
+                        )'>
+                        WAV
+                    </button>
+
+                </div>
+            `;
+
+            results.appendChild(item);
+        });
+
+    }catch(error){
+
+        status.textContent =
+            "Error: " + error.message;
+
+    }finally{
+
+        searchButton.disabled = false;
+    }
+}
+
+
+async function downloadAudio(url,format,button){
+
+    button.disabled = true;
+    button.textContent = "Procesando...";
+
+    status.textContent =
+        "Descargando " +
+        format.toUpperCase() +
+        "...";
+
+    try{
+
+        const response =
+            await fetch("/api/download",{
+                method:"POST",
+                headers:{
+                    "Content-Type":
+                        "application/json"
+                },
+                body:JSON.stringify({
+                    url:url,
+                    format:format
+                })
+            });
+
+        const data =
+            await response.json();
+
+        if(!response.ok){
+            throw new Error(
+                data.error ||
+                "Error al descargar"
+            );
+        }
+
+        status.textContent =
+            "¡Archivo listo!";
+
+        const old =
+            button.parentElement
+            .parentElement
+            .querySelector(".download");
+
+        if(old){
+            old.remove();
+        }
+
+        const link =
+            document.createElement("a");
+
+        link.className = "download";
+        link.href = data.download;
+        link.download = data.filename;
+        link.textContent =
+            "⬇ Descargar " +
+            format.toUpperCase();
+
+        button.parentElement
+            .parentElement
+            .appendChild(link);
+
+        button.textContent = "Listo";
+
+    }catch(error){
+
+        status.textContent =
+            "Error: " + error.message;
+
+        button.disabled = false;
+        button.textContent =
+            format.toUpperCase();
+    }
+}
+
+
+searchButton.addEventListener(
+    "click",
+    search
+);
+
+query.addEventListener(
+    "keydown",
+    event => {
+        if(event.key === "Enter"){
+            search();
+        }
+    }
+);
+
+</script>
+
+</body>
+</html>
+
